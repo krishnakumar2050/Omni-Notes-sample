@@ -1,0 +1,93 @@
+"""Markdown and JSON presentation of review reports."""
+
+
+def markdown(report):
+    lines = [
+        "# Code review report",
+        "",
+        f"Status: **{report['status']}**",
+        "",
+        report["coverage_note"],
+        "",
+        " | ".join(f"{key}: {value}" for key, value in report["counts"].items()),
+        "",
+    ]
+    if synthesis := report.get("synthesis"):
+        lines += ["## Aggregator synthesis", "", synthesis["summary"], ""]
+        for priority in synthesis["priorities"]:
+            lines += [
+                f"- [{priority['severity'].upper()}] `{priority['file']}:{priority['line']}` "
+                f"{priority['title']}: {priority['recommendation']}"
+            ]
+        gaps = synthesis["failed_agents"] + synthesis["missing_agents"]
+        if gaps:
+            lines += ["", "Review gaps: " + ", ".join(sorted(set(gaps)))]
+        lines += [""]
+    if report.get("run_id"):
+        lines += [
+            f"Run: `{report['run_id']}` · Schema: {report['schema_version']}",
+            "",
+            f"Repository: `{report['repository']}`",
+            "",
+            f"Snapshot SHA-256: `{report['snapshot_sha256']}`",
+            "",
+            f"Completed: {report['completed_at']} · Duration: {report['duration_seconds']} seconds",
+            "",
+        ]
+    if any(agent.get("execution", {}).get("backend") for agent in report["agents"]):
+        lines += [
+            "## Model provenance",
+            "",
+            "| Agent | Requested model | Actual model | Evidence |",
+            "| --- | --- | --- | --- |",
+        ]
+        for agent in report["agents"]:
+            metadata = agent.get("execution", {})
+            default = "CLI default" if metadata.get("backend") == "codex" else "Unspecified"
+            lines += [
+                f"| {agent['agent']} | {metadata.get('requested_model') or default} | {metadata.get('actual_model') or 'Unknown'} | {metadata.get('model_source', 'unavailable')} |"
+            ]
+        lines += [""]
+    for agent in report["agents"]:
+        knowledge = agent.get("execution", {}).get("knowledge_enrichment", {})
+        if knowledge and knowledge.get("status") != "disabled":
+            lines += [
+                "## Agent 1 anti-pattern knowledge" if agent["agent"] == "quality"
+                else "## Security framework knowledge",
+                "",
+                f"Keenable status: {knowledge['status']}",
+                "",
+            ]
+            if knowledge.get("frameworks"):
+                lines += ["Frameworks: " + ", ".join(knowledge["frameworks"]), ""]
+            for source in knowledge.get("sources", []):
+                lines += [f"- {source['title']} — {source['url']}"]
+            lines += [
+                "",
+                "External guidance supplements source analysis; it is not repository evidence.",
+                "",
+            ]
+    for index, finding in enumerate(report["findings"], 1):
+        lines += [
+            f"## {index}. [{finding['severity'].upper()}] {finding['title']}",
+            "",
+            f"Location: `{finding['file']}:{finding['line']}` · Agents: {', '.join(finding['agents'])}",
+            "",
+            finding["explanation"],
+            "",
+            f"Fix: {finding['recommendation']}",
+            "",
+        ]
+        if finding["suggested_test"]:
+            lines += [f"Suggested test: {finding['suggested_test']}", ""]
+        lines += ["Evidence:", "", "````", finding["evidence"], "````", ""]
+    if not report["findings"]:
+        lines += [
+            "No verified findings returned. This does not establish that the code is defect-free.",
+            "",
+        ]
+    lines += ["## Review limitations", ""]
+    for agent in report["agents"]:
+        lines += [f"- {agent['agent']}: {agent['status']}"]
+        lines += [f"  - {item}" for item in agent["limitations"]]
+    return "\n".join(lines) + "\n"
