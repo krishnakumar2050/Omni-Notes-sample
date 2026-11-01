@@ -12,4 +12,4 @@ javac -d /tmp/omni-review-sample-classes review-fixtures/android/NoteExportPrevi
 java -cp /tmp/omni-review-sample-classes it.feio.android.omninotes.reviewfixture.NoteExportPreviewTest
 ```
 
-The evaluator receives the two Java files only, excluding this ground-truth description. Results apply to this isolated sample, not the full Omni-Notes app. The repository does not yet have the multi-agent GitHub Actions integration installed; a local review must not be described as an automated Actions run.
+The evaluator receives the two Java files only, excluding this ground-truth description. Results apply to this isolated sample, not the full Omni-Notes app. The automatic multi-agent GitHub Actions integration is installed on the default branch through PR #2. This documentation update triggers a live PR-event verification. Earlier local evaluations remain distinct from Actions results.
