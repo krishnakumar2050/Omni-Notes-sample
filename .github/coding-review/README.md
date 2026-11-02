@@ -11,6 +11,7 @@ Three specialist reviewers examine one bounded source snapshot: correctness and 
 
 - [Omni-Notes Android — comprehensive prioritized findings](reports/omni-notes/review-report-omni-notes.md)
 - [Omni-Notes — raw findings and execution provenance](reports/omni-notes/review-report-omni-notes.json)
+- [Omni-Notes — automatic PR workflow installation and activation](reports/omni-notes/2026-11-01-workflow-installation.md)
 - [Omni-Notes sample PR #1 — detection results and reviewer gaps](reports/omni-notes/2026-11-01-sample-pr-1/evaluation-summary.md)
 - [Expense Tracker mobile app — prioritized findings](reports/expense-tracker/review-report-expense-tracker.md)
 - [Expense Tracker — full three-agent report](reports/expense-tracker/review-report-expense-tracker-raw.md)
@@ -125,7 +126,8 @@ flowchart TD
     Quality --> Join[Aggregator agent: join and synthesize]
     Security --> Join
     Tests --> Join
-    Join --> Report[Priorities, shared findings, review gaps and provenance]
+    Join --> Judge[PR performance evaluator]
+    Judge --> Report[Review, evaluation scores and provenance]
     Report --> Writer[Atomic Markdown or JSON writer]
 ```
 
@@ -293,3 +295,31 @@ only changed lines, and disclose omitted unchanged/deleted files. Vendored engin
 updates require deployment to the target repository's default branch. See
 [integration setup](integrations/github/README.md). GitHub Actions requires its
 own repository secret; macOS Keychain credentials are not available in CI.
+
+## Automatic review performance evaluation
+
+PR reviews now run a fourth, separate structured-output model invocation after
+quality/security/test-gap fan-out and aggregation. The versioned system prompt
+is `coding_review/agents/evaluation_prompt.py`. It assesses bug accuracy,
+security, actionability and false positives, each scored 1–5 (higher is better).
+The exact four-field judgment is written as `evaluation.json`, included in
+`report.json`, and displayed near the top of the bot comment. Execution status,
+prompt version/hash, model provenance and timing live separately in
+`evaluation-status.json`. All are included in the existing Actions artifact.
+
+The judge receives numbered PR-head source, available bounded changed-file
+patches, PR context and the full review. PR text/reviews/search results are
+untrusted data. Missing patches and omitted context must be disclosed. Source
+citations do not prove correctness; scores are model judgments, not measured
+precision/recall or an exhaustive audit. Prompt instructions require all three
+evidence-summary sections before scoring. Scores and PASS consistency are
+validated. FAIL/NEEDS_REVISION are advisory; evaluator execution failure fails
+the workflow while preserving and publishing the review without invented scores.
+No-source PRs explicitly skip evaluation without model calls.
+
+The default evaluator uses a separate invocation of the same Fireworks model.
+Set the repository Actions variable `FIREWORKS_EVALUATOR_MODEL` to use another
+model and reduce correlated self-judgment; this does not establish independence
+or eliminate judge bias. Evaluation adds model latency/token cost. Local CLI
+runs opt in with `--evaluate`; PR reviews always enable it. A library caller can
+set `ReviewConfig(evaluate_review=True)` and provide evaluation context/backend.
