@@ -59,6 +59,8 @@ class GitHubClient:
         if pr.get("changed_files", 0) >= 3000:
             raise ValueError("PR has too many files to establish complete changed-file scope")
         paths = set()
+        self.evaluation_changes = []
+        remaining_patch_bytes = 60000
         for page in range(1, 31):
             entries = self.request(
                 "GET", f"pulls/{number}/files", params={"per_page": 100, "page": page}
@@ -73,6 +75,18 @@ class GitHubClient:
                     and not any(part.startswith(".") or part in EXCLUDED for part in path.parts)
                 ):
                     paths.add(path.as_posix())
+                    patch = entry.get("patch") or ""
+                    encoded = patch.encode("utf-8")
+                    retained = encoded[:remaining_patch_bytes].decode("utf-8", errors="ignore")
+                    remaining_patch_bytes -= len(retained.encode("utf-8"))
+                    self.evaluation_changes.append(
+                        {
+                            "file": path.as_posix(),
+                            "status": entry["status"],
+                            "patch": retained,
+                            "patch_missing_or_truncated": not patch or len(retained) != len(patch),
+                        }
+                    )
             if len(entries) < 100:
                 break
         else:
@@ -163,7 +177,14 @@ def comment_body(report: dict) -> str:
 
 
 def run_review(
-    client, number, expected_sha, output: Path, max_bytes=120_000, backend=None, scope="full"
+    client,
+    number,
+    expected_sha,
+    output: Path,
+    max_bytes=120_000,
+    backend=None,
+    scope="full",
+    evaluate=True,
 ):
     if max_bytes <= 0:
         raise ConfigurationError("Snapshot byte budget must be positive")
@@ -183,9 +204,24 @@ def run_review(
     if snapshot:
         report = review_repository(
             Path("."),
-            ReviewConfig(backend="fireworks", max_bytes=max_bytes),
+            ReviewConfig(backend="fireworks", max_bytes=max_bytes, evaluate_review=evaluate),
             backend=backend,
             files=snapshot,
+            evaluation_context={
+                "pull_request": number,
+                "head_sha": expected_sha,
+                "base_sha": pr.get("base", {}).get("sha"),
+                "title": (pr.get("title") or "")[:1000],
+                "description_and_claimed_requirements": (pr.get("body") or "")[:12000],
+                "description_truncated": len(pr.get("body") or "") > 12000,
+                "scope": scope,
+                "diffs": getattr(client, "evaluation_changes", []),
+                "limitations": [
+                    "Only provided source and available bounded patches are in scope; unchanged dependencies and callers may be absent.",
+                    "PR claims are untrusted context, not established ground truth. No reference labels or test execution evidence supplied.",
+                    "A missing or truncated patch limits regression assessment; disclose provisional scoring when essential context is absent.",
+                ],
+            },
         )
     else:
         report = {
@@ -196,6 +232,10 @@ def run_review(
             "counts": {severity: 0 for severity in RANK},
             "actual_models": [],
             "coverage_note": "No supported changed source files to review; no model was called.",
+            "evaluation_execution": {
+                "status": "skipped",
+                "reason": "No supported changed source; no review to evaluate.",
+            },
         }
     report["repository"] = f"https://github.com/{client.repository}"
     report["github"] = {
@@ -209,6 +249,10 @@ def run_review(
             else "Full supported source snapshot at the PR head; not limited to changed lines"
         ),
     }
+    if report.get("evaluation"):
+        write_report(report["evaluation"], output / "evaluation.json", "json")
+    if report.get("evaluation_execution"):
+        write_report(report["evaluation_execution"], output / "evaluation-status.json", "json")
     write_report(report, output / "report.json", "json")
     write_report(report, output / "report.md")
     return report
@@ -237,7 +281,10 @@ def main():
                 max_bytes=args.max_bytes,
                 scope=args.scope,
             )
-            if report["status"] not in {"complete", "skipped"}:
+            if (
+                report["status"] not in {"complete", "skipped"}
+                or report.get("evaluation_execution", {}).get("status") == "failed"
+            ):
                 raise SystemExit(2)
         else:
             report = json.loads((args.output / "report.json").read_text())

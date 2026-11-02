@@ -47,3 +47,14 @@ executed from PR contents. Concurrent runs on the same PR supersede older runs.
 
 For a full repository audit, use the CLI's `--scope full` explicitly; the Python
 `run_review` API keeps its previous full-snapshot default for compatibility.
+
+## Performance judge on every PR review
+
+A post-aggregation evaluator automatically scores each eligible source review.
+The bot comment includes its verdict and four 1–5 scores; the Actions artifact
+also includes exact-schema `evaluation.json` and provenance/status in
+`evaluation-status.json`. `FIREWORKS_EVALUATOR_MODEL` is an optional repository
+Actions variable; absent it, the reviewer model is reused in a separate request.
+Verdicts are advisory. Invalid/failed judge output fails the workflow while
+preserving the review. PRs without supported source skip both inference stages.
+The prompt is versioned with a recorded hash; results remain model judgments.

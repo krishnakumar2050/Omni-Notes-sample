@@ -18,7 +18,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.draft == false && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout trusted default-branch review engine
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -49,6 +49,7 @@ jobs:
           KEENABLE_SECURITY_ENABLED: 'true'
           CODING_REVIEW_PLATFORM: android
           FIREWORKS_MODEL: ${{ vars.FIREWORKS_MODEL || 'accounts/fireworks/models/minimax-m3p1-flash' }}
+          FIREWORKS_EVALUATOR_MODEL: ${{ vars.FIREWORKS_EVALUATOR_MODEL || vars.FIREWORKS_MODEL || 'accounts/fireworks/models/minimax-m3p1-flash' }}
           KEENABLE_API_KEY: ${{ secrets.KEENABLE_API_KEY }}
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY || secrets.CODINGAGENT }}
           GITHUB_TOKEN: ${{ github.token }}
