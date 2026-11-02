@@ -126,7 +126,8 @@ flowchart TD
     Quality --> Join[Aggregator agent: join and synthesize]
     Security --> Join
     Tests --> Join
-    Join --> Report[Priorities, shared findings, review gaps and provenance]
+    Join --> Judge[PR performance evaluator]
+    Judge --> Report[Review, evaluation scores and provenance]
     Report --> Writer[Atomic Markdown or JSON writer]
 ```
 

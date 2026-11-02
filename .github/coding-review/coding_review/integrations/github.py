@@ -251,6 +251,8 @@ def run_review(
     }
     if report.get("evaluation"):
         write_report(report["evaluation"], output / "evaluation.json", "json")
+    else:
+        (output / "evaluation.json").unlink(missing_ok=True)
     if report.get("evaluation_execution"):
         write_report(report["evaluation_execution"], output / "evaluation-status.json", "json")
     write_report(report, output / "report.json", "json")
